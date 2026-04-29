@@ -10,6 +10,7 @@ import {
   getDeployments,
 } from "../services/deploymentService";
 import { runDeployment } from "../workers/deploymentWorker";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import db from "../db";
 
 
@@ -75,6 +76,25 @@ router.get("/:id/proxy", (req, res) => {
 
   
   res.redirect(`http://localhost:${deployment.port}`);
+});
+
+router.use("/:id", (req, res, next) => {
+  const { id } = req.params;
+
+  const deployments = getDeployments();
+  const deployment = deployments.find((d: any) => d.id === id);
+
+  if (!deployment || !deployment.port) {
+    return res.status(404).send("Not running");
+  }
+
+  return createProxyMiddleware({
+    target: `http://localhost:${deployment.port}`,
+    changeOrigin: true,
+    pathRewrite: {
+      [`^/${id}`]: "",
+    },
+  })(req, res, next);
 });
 
 export default router;

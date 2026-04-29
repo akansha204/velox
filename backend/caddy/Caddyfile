@@ -3,7 +3,8 @@
 }
 
 :8080 {
-  handle /deployments/* {
+  route /deployments/* {
+    uri strip_prefix /deployments
     reverse_proxy localhost:3001
   }
 }
