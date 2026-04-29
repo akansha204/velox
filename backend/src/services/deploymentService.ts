@@ -18,6 +18,14 @@ export function getDeployments() {
   `).all();
 }
 
+export function updateDeployment(id: string, data: any) {
+  db.prepare(`
+    UPDATE deployments 
+    SET imageTag = ?, port = ? 
+    WHERE id = ?
+  `).run(data.imageTag, data.port, id);
+}
+
 export function updateDeploymentStatus(id: string, status: string) {
   db.prepare(`
     UPDATE deployments SET status = ? WHERE id = ?

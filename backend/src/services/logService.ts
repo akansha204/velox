@@ -2,6 +2,7 @@ const logs: Record<string, string[]> = {};
 const clients: Record<string, any[]> = {};
 
 export function addLog(deploymentId: string, message: string) {
+  console.log("LOG:", message);
   if (!logs[deploymentId]) {
     logs[deploymentId] = [];
   }

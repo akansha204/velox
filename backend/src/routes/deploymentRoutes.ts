@@ -9,6 +9,8 @@ import {
   createDeployment,
   getDeployments,
 } from "../services/deploymentService";
+import { runDeployment } from "../workers/deploymentWorker";
+
 
 const router = Router();
 
@@ -21,11 +23,10 @@ router.post("/", (req, res) => {
 
   const id = createDeployment(repoUrl);
 
-  setTimeout(() => addLog(id, "Cloning repo..."), 1000);
-  setTimeout(() => addLog(id, "Installing dependencies..."), 2000);
-  setTimeout(() => addLog(id, "Building project..."), 3000);
-  setTimeout(() => addLog(id, "Deployment complete!"), 4000);
-
+  setTimeout(() => {
+    runDeployment(id, repoUrl);
+  }, 2000);
+  
   res.json({ id });
 });
 
