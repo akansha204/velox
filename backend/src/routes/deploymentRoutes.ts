@@ -10,6 +10,7 @@ import {
   getDeployments,
 } from "../services/deploymentService";
 import { runDeployment } from "../workers/deploymentWorker";
+import db from "../db";
 
 
 const router = Router();
@@ -55,6 +56,25 @@ router.get("/:id/logs", (req, res) => {
   req.on("close", () => {
     removeClient(id, res);
   });
+});
+
+router.delete("/reset", (req, res) => {
+  db.prepare("DELETE FROM deployments").run();
+  res.json({ success: true });
+});
+
+router.get("/:id/proxy", (req, res) => {
+  const { id } = req.params;
+
+  const deployments = getDeployments();
+  const deployment = deployments.find((d: any) => d.id === id);
+
+  if (!deployment || !deployment.port) {
+    return res.status(404).send("Not running");
+  }
+
+  
+  res.redirect(`http://localhost:${deployment.port}`);
 });
 
 export default router;
