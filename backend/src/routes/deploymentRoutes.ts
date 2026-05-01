@@ -64,19 +64,6 @@ router.delete("/reset", (req, res) => {
   res.json({ success: true });
 });
 
-router.get("/:id/proxy", (req, res) => {
-  const { id } = req.params;
-
-  const deployments = getDeployments();
-  const deployment = deployments.find((d: any) => d.id === id);
-
-  if (!deployment || !deployment.port) {
-    return res.status(404).send("Not running");
-  }
-
-  
-  res.redirect(`http://localhost:${deployment.port}`);
-});
 
 router.use("/:id", (req, res, next) => {
   const { id } = req.params;
@@ -88,13 +75,18 @@ router.use("/:id", (req, res, next) => {
     return res.status(404).send("Not running");
   }
 
-  return createProxyMiddleware({
-    target: `http://localhost:${deployment.port}`,
+  const deploymentHost = process.env.DEPLOYMENT_HOST || "host.docker.internal";
+
+  const proxy = createProxyMiddleware({
+    target: `http://${deploymentHost}:${deployment.port}`,
     changeOrigin: true,
-    pathRewrite: {
-      [`^/${id}`]: "",
+
+    pathRewrite: (_path, req) => {
+      return req.url || "/";
     },
-  })(req, res, next);
+  });
+
+  return proxy(req, res, next);
 });
 
 export default router;
