@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: velox-backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3001:3001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    command: npm run dev
+
+  caddy:
+    image: caddy:latest
+    container_name: velox-caddy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/caddy/Caddyfile:/etc/caddy/Caddyfile
