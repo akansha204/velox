@@ -37,7 +37,7 @@ export function DeploymentItem({
       <div className="min-w-0 space-y-1">
         <p className="text-sm text-gray-500">{deployment.id}</p>
         <p className="truncate text-sm font-medium text-gray-950">
-          {deployment.imageTag}
+          {deployment.imageTag ?? deployment.repoUrl}
         </p>
       </div>
 

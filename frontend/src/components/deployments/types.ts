@@ -13,8 +13,10 @@ export type LogLine = {
 
 export type Deployment = {
   id: string;
-  imageTag: string;
+  repoUrl: string;
   status: DeploymentStatus;
+  imageTag: string | null;
+  port: number | null;
+  createdAt: number;
   liveUrl?: string;
-  logs: LogLine[];
 };

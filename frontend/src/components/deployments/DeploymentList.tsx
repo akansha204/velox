@@ -3,12 +3,16 @@ import type { Deployment } from "./types";
 
 type DeploymentListProps = {
   deployments: Deployment[];
+  errorMessage?: string;
+  isLoading?: boolean;
   selectedDeploymentId?: string;
   onSelectDeployment: (deploymentId: string) => void;
 };
 
 export function DeploymentList({
   deployments,
+  errorMessage,
+  isLoading = false,
   selectedDeploymentId,
   onSelectDeployment,
 }: DeploymentListProps) {
@@ -21,7 +25,15 @@ export function DeploymentList({
         </p>
       </div>
 
-      {deployments.length > 0 ? (
+      {isLoading ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+          Loading deployments...
+        </div>
+      ) : errorMessage ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {errorMessage}
+        </div>
+      ) : deployments.length > 0 ? (
         <div className="space-y-3">
           {deployments.map((deployment) => (
             <DeploymentItem
