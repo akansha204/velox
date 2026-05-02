@@ -3,7 +3,7 @@ import {
   addClient,
   removeClient,
   getLogs,
-  addLog,
+  writeSseMessage,
 } from "../services/logService";
 import {
   createDeployment,
@@ -49,7 +49,7 @@ router.get("/:id/logs", (req, res) => {
 
   const existingLogs = getLogs(id);
   existingLogs.forEach((log) => {
-    res.write(`data: ${log}\n\n`);
+    writeSseMessage(res, log);
   });
 
   addClient(id, res);
@@ -60,6 +60,7 @@ router.get("/:id/logs", (req, res) => {
 });
 
 router.delete("/reset", (req, res) => {
+  db.prepare("DELETE FROM deployment_logs").run();
   db.prepare("DELETE FROM deployments").run();
   res.json({ success: true });
 });

@@ -3,6 +3,10 @@
 }
 
 :8080 {
+  handle /deployments {
+    reverse_proxy backend:3001
+  }
+
   handle /deployments/* {
     reverse_proxy backend:3001
   }
