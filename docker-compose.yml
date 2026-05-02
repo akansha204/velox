@@ -1,9 +1,20 @@
-version: "3.9"
-
 services:
+  buildkit:
+    image: moby/buildkit:latest
+    container_name: buildkit
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - buildkit-cache:/var/lib/buildkit
+
   backend:
     build: ./backend
     container_name: velox-backend
+    depends_on:
+      - buildkit
+    environment:
+      BUILDKIT_HOST: docker-container://buildkit
+      DEPLOYMENT_HOST: host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -20,3 +31,6 @@ services:
       - "8080:8080"
     volumes:
       - ./backend/caddy/Caddyfile:/etc/caddy/Caddyfile
+
+volumes:
+  buildkit-cache:
