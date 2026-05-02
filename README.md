@@ -10,6 +10,26 @@ Velox is a small deployment pipeline dashboard. It accepts a Git repository URL,
 - Build/runtime: Docker, BuildKit, Railpack
 - Proxy: Caddy and `http-proxy-middleware`
 
+## Architecture
+
+```mermaid
+flowchart LR
+  user[User Browser] --> frontend[React + Vite Frontend]
+  frontend -->|REST API| caddy[Caddy Proxy]
+  frontend -->|SSE Logs| caddy
+  caddy --> backend[Express Backend]
+
+  backend --> sqlite[(SQLite Database)]
+  backend --> worker[Deployment Worker]
+  worker -->|git clone| repo[Git Repository]
+  worker -->|railpack build| buildkit[BuildKit]
+  buildkit --> image[Docker Image]
+  worker -->|docker run| app[Deployed App Container]
+
+  caddy -->|/deployments/:id| backend
+  backend -->|reverse proxy| app
+```
+
 ## Project Structure
 
 ```text
