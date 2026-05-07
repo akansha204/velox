@@ -9,6 +9,7 @@ import { useDeploymentLogs } from "../../hooks/useDeploymentLogs";
 import { CreateDeploymentForm } from "./CreateDeploymentForm";
 import { DeploymentList } from "./DeploymentList";
 import { LogsViewer } from "./LogsViewer";
+import { PlatformSupportSection } from "./PlatformSupportSection";
 import type { Deployment, DeploymentStatus } from "./types";
 
 const activeStatuses: DeploymentStatus[] = ["pending", "building", "deploying"];
@@ -52,6 +53,7 @@ export function DeploymentDashboard() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 p-6">
+      <PlatformSupportSection />
       <CreateDeploymentForm
         errorMessage={
           createDeploymentMutation.isError
