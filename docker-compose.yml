@@ -12,9 +12,8 @@ services:
     container_name: velox-backend
     depends_on:
       - buildkit
-    environment:
-      BUILDKIT_HOST: docker-container://buildkit
-      DEPLOYMENT_HOST: host.docker.internal
+    env_file:
+      - .env.local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -27,10 +26,12 @@ services:
   caddy:
     image: caddy:latest
     container_name: velox-caddy
+    env_file:
+      - .env.local
     ports:
-      - "8080:8080"
+      - "${CADDY_HTTP_PORT:-8080}:${CADDY_HTTP_PORT:-8080}"
     volumes:
-      - ./backend/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./backend/caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
 
 volumes:
   buildkit-cache:
