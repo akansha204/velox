@@ -483,6 +483,69 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
 - **Security:** The platform accepts arbitrary Git URLs. Restrict access or run in a sandboxed environment.
 - **Resource limits:** Each deployment runs in a separate container. Monitor disk usage as built images accumulate.
 
+## CI/CD
+
+The frontend is deployed by Vercel. Backend deployment is handled by GitHub Actions in `.github/workflows/deploy-backend.yml`.
+
+The backend workflow does three things:
+
+1. Runs a backend TypeScript check with `npx tsc --noEmit`.
+2. SSHes into the EC2 machine.
+3. Pulls the latest `master` branch and restarts the production Docker Compose stack.
+
+The workflow runs automatically when backend or Compose files change on `master`. It can also be run manually from the GitHub Actions tab with `workflow_dispatch`.
+
+### GitHub Secrets
+
+Add these repository secrets in GitHub:
+
+```text
+EC2_HOST      EC2 public IP address or SSH hostname
+EC2_USER      ubuntu
+EC2_SSH_KEY   Private SSH key that can log into the EC2 instance
+```
+
+To create a dedicated deploy key from your local machine:
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-velox" -f velox-actions-key
+```
+
+Add the public key to EC2:
+
+```bash
+cat velox-actions-key.pub | ssh ubuntu@<ec2-host> 'cat >> ~/.ssh/authorized_keys'
+```
+
+Add the private key contents to GitHub as `EC2_SSH_KEY`:
+
+```bash
+cat velox-actions-key
+```
+
+### EC2 Requirements
+
+The workflow assumes:
+
+- The repo exists at `/home/ubuntu/velox`.
+- `.env.production` exists on EC2.
+- Docker Compose works with `sudo docker compose`.
+- The EC2 security group allows SSH, HTTP, and HTTPS as needed.
+
+On deployment, the workflow runs:
+
+```bash
+git fetch origin master
+git reset --hard origin/master
+
+sudo docker compose \
+  --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  up -d --build
+```
+
+`git reset --hard origin/master` intentionally makes tracked files on EC2 match GitHub. Keep production-only values in `.env.production`, not in manually edited tracked files.
 
 ## Current API
 
