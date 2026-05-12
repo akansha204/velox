@@ -1,6 +1,7 @@
 import db from "../db";
 import { randomUUID } from "crypto";
 import { getDeploymentPublicUrl } from "../config";
+import { cleanupExpiredDeployments } from "./cleanupService";
 
 export type DeploymentRecord = {
   id: string;
@@ -27,6 +28,8 @@ export function createDeployment(repoUrl: string) {
 }
 
 export function getDeployments() {
+  cleanupExpiredDeployments();
+
   const deployments = db.prepare(`
     SELECT * FROM deployments ORDER BY createdAt DESC
   `).all() as DeploymentRecord[];
@@ -41,6 +44,8 @@ export function getDeployments() {
 }
 
 export function getDeploymentById(id: string) {
+  cleanupExpiredDeployments();
+
   return db.prepare(`
     SELECT * FROM deployments WHERE id = ?
   `).get(id) as DeploymentRecord | undefined;

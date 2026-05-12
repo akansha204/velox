@@ -1,5 +1,13 @@
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
 
+const parsePositiveNumber = (value: string | undefined, fallback: number) => {
+  if (!value) return fallback;
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
 const env = process.env.VELOX_ENV ?? process.env.NODE_ENV ?? "local";
 
 export const config = {
@@ -14,6 +22,11 @@ export const config = {
   deploymentUrlMode: process.env.DEPLOYMENT_URL_MODE ?? "path",
   deploymentHost: process.env.DEPLOYMENT_HOST ?? "host.docker.internal",
   buildkitHost: process.env.BUILDKIT_HOST ?? "docker-container://buildkit",
+  deploymentTtlDays: parsePositiveNumber(process.env.DEPLOYMENT_TTL_DAYS, 5),
+  cleanupIntervalMs: parsePositiveNumber(
+    process.env.CLEANUP_INTERVAL_MS,
+    60 * 60 * 1000,
+  ),
 };
 
 export function getDeploymentPublicUrl(deploymentId: string) {

@@ -19,6 +19,17 @@ function writeSseMessage(res: Response, message: string) {
 export function addLog(deploymentId: string, message: string) {
   console.log("LOG:", message);
 
+  const deploymentExists = db.prepare(`
+    SELECT 1
+    FROM deployments
+    WHERE id = ?
+  `).get(deploymentId);
+
+  if (!deploymentExists) {
+    closeClients([deploymentId]);
+    return;
+  }
+
   db.prepare(`
     INSERT INTO deployment_logs (deploymentId, message, createdAt)
     VALUES (?, ?, ?)
@@ -65,6 +76,21 @@ export function removeClient(deploymentId: string, res: Response) {
   clients[deploymentId] = clients[deploymentId].filter(
     (client) => client !== res
   );
+}
+
+export function closeClients(deploymentIds: string[]) {
+  deploymentIds.forEach((deploymentId) => {
+    const deploymentClients = clients[deploymentId];
+
+    if (!deploymentClients) return;
+
+    deploymentClients.forEach((res) => {
+      writeSseMessage(res, "Deployment expired and logs were removed.");
+      res.end();
+    });
+
+    delete clients[deploymentId];
+  });
 }
 
 export { writeSseMessage };

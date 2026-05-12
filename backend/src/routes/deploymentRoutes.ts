@@ -14,6 +14,7 @@ import { runDeployment } from "../workers/deploymentWorker";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import db from "../db";
 import { config } from "../config";
+import { cleanupExpiredDeployments } from "../services/cleanupService";
 
 
 const router = Router();
@@ -42,6 +43,8 @@ router.get("/", (req, res) => {
 //SSE logs
 router.get("/:id/logs", (req, res) => {
   const { id } = req.params;
+
+  cleanupExpiredDeployments();
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
