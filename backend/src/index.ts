@@ -1,9 +1,14 @@
 import express from "express";
 import cors from "cors";
 import deploymentRoutes from "./routes/deploymentRoutes";
+import { config } from "./config";
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: config.frontendOrigin,
+  }),
+);
 app.use(express.json());
 
 app.use("/deployments", deploymentRoutes);

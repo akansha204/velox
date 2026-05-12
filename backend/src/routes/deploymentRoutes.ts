@@ -7,11 +7,13 @@ import {
 } from "../services/logService";
 import {
   createDeployment,
+  getDeploymentById,
   getDeployments,
 } from "../services/deploymentService";
 import { runDeployment } from "../workers/deploymentWorker";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import db from "../db";
+import { config } from "../config";
 
 
 const router = Router();
@@ -69,17 +71,14 @@ router.delete("/reset", (req, res) => {
 router.use("/:id", (req, res, next) => {
   const { id } = req.params;
 
-  const deployments = getDeployments();
-  const deployment = deployments.find((d: any) => d.id === id);
+  const deployment = getDeploymentById(id);
 
   if (!deployment || !deployment.port) {
     return res.status(404).send("Not running");
   }
 
-  const deploymentHost = process.env.DEPLOYMENT_HOST || "host.docker.internal";
-
   const proxy = createProxyMiddleware({
-    target: `http://${deploymentHost}:${deployment.port}`,
+    target: `http://${config.deploymentHost}:${deployment.port}`,
     changeOrigin: true,
 
     pathRewrite: (_path, req) => {

@@ -1,5 +1,19 @@
 import db from "../db";
 import { randomUUID } from "crypto";
+import { getDeploymentPublicUrl } from "../config";
+
+export type DeploymentRecord = {
+  id: string;
+  repoUrl: string;
+  status: string;
+  imageTag: string | null;
+  port: number | null;
+  createdAt: number;
+};
+
+export type DeploymentResponse = DeploymentRecord & {
+  liveUrl?: string;
+};
 
 export function createDeployment(repoUrl: string) {
   const id = randomUUID();
@@ -13,9 +27,23 @@ export function createDeployment(repoUrl: string) {
 }
 
 export function getDeployments() {
-  return db.prepare(`
+  const deployments = db.prepare(`
     SELECT * FROM deployments ORDER BY createdAt DESC
-  `).all();
+  `).all() as DeploymentRecord[];
+
+  return deployments.map((deployment) => ({
+    ...deployment,
+    liveUrl:
+      deployment.status === "running"
+        ? getDeploymentPublicUrl(deployment.id)
+        : undefined,
+  }));
+}
+
+export function getDeploymentById(id: string) {
+  return db.prepare(`
+    SELECT * FROM deployments WHERE id = ?
+  `).get(id) as DeploymentRecord | undefined;
 }
 
 export function updateDeployment(id: string, data: any) {

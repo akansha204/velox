@@ -7,6 +7,7 @@ import {
   updateDeploymentStatus,
   updateDeployment,
 } from "../services/deploymentService";
+import { config, getDeploymentPublicUrl } from "../config";
 
 export function runDeployment(id: string, repoUrl: string) {
   const projectPath = path.join(__dirname, "../../tmp", id);
@@ -37,7 +38,7 @@ export function runDeployment(id: string, repoUrl: string) {
       cwd: projectPath,
       env: {
         ...process.env,
-        BUILDKIT_HOST: process.env.BUILDKIT_HOST || "docker-container://buildkit",
+        BUILDKIT_HOST: config.buildkitHost,
       },
     });
 
@@ -94,7 +95,7 @@ export function runDeployment(id: string, repoUrl: string) {
             port,
           });
 
-          addLog(id, `App running at http://localhost:${port}`);
+          addLog(id, `App running at ${getDeploymentPublicUrl(id)}`);
         });
       });
     });
