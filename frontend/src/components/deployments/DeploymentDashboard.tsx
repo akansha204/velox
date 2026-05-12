@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  API_BASE_URL,
   createDeployment,
   getDeployments,
 } from "../../api/deployments";
@@ -37,17 +36,7 @@ export function DeploymentDashboard() {
     },
   });
 
-  const deployments: Deployment[] = useMemo(
-    () =>
-      (deploymentsQuery.data ?? []).map((deployment) => ({
-        ...deployment,
-        liveUrl:
-          deployment.status === "running"
-            ? `${API_BASE_URL}/deployments/${deployment.id}`
-            : undefined,
-      })),
-    [deploymentsQuery.data],
-  );
+  const deployments: Deployment[] = deploymentsQuery.data ?? [];
 
   const deploymentLogs = useDeploymentLogs(selectedDeploymentId);
 

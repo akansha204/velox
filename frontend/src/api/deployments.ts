@@ -10,6 +10,7 @@ export type BackendDeployment = {
   imageTag: string | null;
   port: number | null;
   createdAt: number;
+  liveUrl?: string;
 };
 
 export type CreateDeploymentInput = {
