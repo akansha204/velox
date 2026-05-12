@@ -154,7 +154,7 @@ flowchart LR
 7. Logs are streamed to the client in real-time via Server-Sent Events.
 8. The backend returns a `liveUrl` for running deployments based on the active environment config.
 9. The running deployment is accessible through the backend reverse proxy.
-10. Deployment records remain in SQLite until they are cleared with the reset endpoint or the database is removed.
+10. Expired deployment records and logs are automatically removed by the backend cleanup scheduler.
 
 ## Technical Notes
 
@@ -221,7 +221,7 @@ Each deployment:
 4. **Running**: Application is serving requests at `/deployments/:id`
 5. **Failed**: Build or runtime error occurred; check logs for details
 
-Failed deployments remain in the database until they are cleared with `DELETE /deployments/reset` or the database is removed.
+Deployment history is ephemeral. Records and associated logs are automatically deleted after the configured TTL.
 
 ### Port Allocation and Container Networking
 
@@ -234,6 +234,8 @@ Failed deployments remain in the database until they are cleared with `DELETE /d
   - `.env.example` documents every supported setting.
 - `PUBLIC_API_BASE_URL`, `DEPLOYMENT_URL_MODE`, and `PUBLIC_DEPLOYMENT_BASE_DOMAIN` determine the public deployment URLs returned by the backend.
 - `FRONTEND_ORIGIN` controls which frontend origin the backend allows through CORS.
+- `DEPLOYMENT_TTL_DAYS` controls how long deployment history and logs are retained.
+- `CLEANUP_INTERVAL_MS` controls how often the backend runs the automatic cleanup job.
 - The `DEPLOYMENT_HOST` environment variable determines how the backend reaches deployment containers (defaults to `host.docker.internal` in Docker)
 
 ### Deployment State and Logs
@@ -241,8 +243,10 @@ Failed deployments remain in the database until they are cleared with `DELETE /d
 - Deployment state is stored in SQLite.
 - Logs are stored in SQLite and streamed to connected clients over Server-Sent Events.
 - The backend keeps the most recent 1000 log rows per deployment.
+- The backend automatically deletes deployment records and their logs after `DEPLOYMENT_TTL_DAYS`.
+- Cleanup runs on backend startup, periodically every `CLEANUP_INTERVAL_MS`, and before deployment list/proxy/log reads.
 - `DELETE /deployments/reset` clears all deployment records and deployment logs.
-- Resetting the database records does not currently stop already-running Docker containers.
+- Cleanup and reset remove database records and logs, but do not currently stop already-running Docker containers.
 
 ### Environment Files
 
@@ -263,6 +267,8 @@ VITE_API_BASE_URL=https://api.velox.akanshatwt.me
 FRONTEND_ORIGIN=https://velox.akanshatwt.me
 DEPLOYMENT_URL_MODE=path
 API_DOMAIN=api.velox.akanshatwt.me
+DEPLOYMENT_TTL_DAYS=5
+CLEANUP_INTERVAL_MS=3600000
 ```
 
 `DEPLOYMENT_URL_MODE=path` means running apps are exposed as:
@@ -278,7 +284,7 @@ If a wildcard deployment domain is added later, switch to `DEPLOYMENT_URL_MODE=s
 - **No custom startup commands**: Applications must follow Railpack's inferred startup behavior
 - **No environment variable configuration**: Build-time variables cannot be overridden after deployment
 - **No persistent app storage**: Deployed applications do not get managed persistent volumes or databases
-- **No automatic deployment cleanup**: Records and running containers are not automatically pruned
+- **No automatic container cleanup**: Expired records and logs are pruned, but running containers and built images are not automatically removed
 - **Single-port model**: Applications must expose HTTP on a single port (typically 3000)
 - **No SSL per deployment**: All deployments are accessed through the single Caddy proxy
 - **No autoscaling**: Each deployment runs a single container instance
@@ -296,8 +302,8 @@ Possible enhancements to the platform:
 - Deployment subdomain routing (e.g., `<deployment-id>.deployments.local`)
 - Better monorepo and workspace handling
 - Persistent volume support for databases and caches
-- Deployment and container cleanup jobs
-- Deployment logs retention and archival beyond the current 1000-line cap
+- Container and built-image cleanup jobs
+- Deployment logs retention and archival beyond the current 5-day TTL and 1000-line cap
 - Performance monitoring and error tracking
 - Webhook support for CI/CD integration
 
@@ -426,6 +432,8 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
    DEPLOYMENT_URL_MODE=path
    PUBLIC_DEPLOYMENT_BASE_DOMAIN=
    API_DOMAIN=api.velox.akanshatwt.me
+   DEPLOYMENT_TTL_DAYS=5
+   CLEANUP_INTERVAL_MS=3600000
    ```
 
    These values are intentionally represented in the repository so the EC2 deployment does not depend on undocumented manual edits.
@@ -471,7 +479,7 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
 ### Important Considerations
 
 - **Storage:** Deployments and logs are stored in `database.db` in the backend container. Use Docker volumes for persistence if restarting containers.
-- **Cleanup:** Deployment records and logs can be cleared with `DELETE /deployments/reset`, but running containers and built images should be monitored and cleaned up separately.
+- **Cleanup:** Deployment records and logs expire automatically after `DEPLOYMENT_TTL_DAYS`. Running containers and built images should still be monitored and cleaned up separately.
 - **Security:** The platform accepts arbitrary Git URLs. Restrict access or run in a sandboxed environment.
 - **Resource limits:** Each deployment runs in a separate container. Monitor disk usage as built images accumulate.
 
