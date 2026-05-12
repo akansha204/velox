@@ -128,12 +128,19 @@ flowchart LR
 │   │   ├── db
 │   │   ├── routes
 │   │   ├── services
-│   │   └── workers
-│   ├── caddy/Caddyfile
+│   │   ├── workers
+│   │   └── config.ts
+│   ├── caddy/
+│   │   ├── Caddyfile.local
+│   │   └── Caddyfile.production
 │   └── Dockerfile
 ├── frontend
 │   └── src
-└── docker-compose.yml
+├── .env.example
+├── .env.local
+├── .env.production
+├── docker-compose.yml
+└── docker-compose.production.yml
 ```
 
 ## How It Works
@@ -145,8 +152,9 @@ flowchart LR
 5. Railpack generates a Dockerfile and BuildKit builds the image.
 6. Docker starts the built image on a random ephemeral port (4000-4999).
 7. Logs are streamed to the client in real-time via Server-Sent Events.
-8. The running deployment is accessible at `/deployments/:id` through the reverse proxy.
-9. Deployments automatically expire and are cleaned up after 7 days.
+8. The backend returns a `liveUrl` for running deployments based on the active environment config.
+9. The running deployment is accessible through the backend reverse proxy.
+10. Deployment records remain in SQLite until they are cleared with the reset endpoint or the database is removed.
 
 ## Technical Notes
 
@@ -213,20 +221,64 @@ Each deployment:
 4. **Running**: Application is serving requests at `/deployments/:id`
 5. **Failed**: Build or runtime error occurred; check logs for details
 
-Failed deployments remain in the database for 7 days, then are automatically cleaned up.
+Failed deployments remain in the database until they are cleared with `DELETE /deployments/reset` or the database is removed.
 
 ### Port Allocation and Container Networking
 
 - Each deployment gets a random ephemeral port (4000-4999)
 - Containers run with port mapping: `-p <random>:3000`
 - All deployed apps are expected to listen on port 3000 inside the container
-- The `DEPLOYMENT_HOST` environment variable determines how to reach containers (defaults to `host.docker.internal` in Docker)
+- Environment-specific values live in repo-level env files:
+  - `.env.local` keeps localhost development defaults.
+  - `.env.production` keeps production domain defaults and should be updated in Git before deploying.
+  - `.env.example` documents every supported setting.
+- `PUBLIC_API_BASE_URL`, `DEPLOYMENT_URL_MODE`, and `PUBLIC_DEPLOYMENT_BASE_DOMAIN` determine the public deployment URLs returned by the backend.
+- `FRONTEND_ORIGIN` controls which frontend origin the backend allows through CORS.
+- The `DEPLOYMENT_HOST` environment variable determines how the backend reaches deployment containers (defaults to `host.docker.internal` in Docker)
+
+### Deployment State and Logs
+
+- Deployment state is stored in SQLite.
+- Logs are stored in SQLite and streamed to connected clients over Server-Sent Events.
+- The backend keeps the most recent 1000 log rows per deployment.
+- `DELETE /deployments/reset` clears all deployment records and deployment logs.
+- Resetting the database records does not currently stop already-running Docker containers.
+
+### Environment Files
+
+Velox keeps environment-specific values at the repository root:
+
+```text
+.env.example      Documents supported variables
+.env.local        Local localhost defaults
+.env.production   Production domain configuration
+```
+
+
+The current production values are:
+
+```env
+PUBLIC_API_BASE_URL=https://api.velox.akanshatwt.me
+VITE_API_BASE_URL=https://api.velox.akanshatwt.me
+FRONTEND_ORIGIN=https://velox.akanshatwt.me
+DEPLOYMENT_URL_MODE=path
+API_DOMAIN=api.velox.akanshatwt.me
+```
+
+`DEPLOYMENT_URL_MODE=path` means running apps are exposed as:
+
+```text
+https://api.velox.akanshatwt.me/deployments/:deploymentId
+```
+
+If a wildcard deployment domain is added later, switch to `DEPLOYMENT_URL_MODE=subdomain` and set `PUBLIC_DEPLOYMENT_BASE_DOMAIN`.
 
 ## Known Limitations
 
 - **No custom startup commands**: Applications must follow Railpack's inferred startup behavior
 - **No environment variable configuration**: Build-time variables cannot be overridden after deployment
-- **No persistent storage**: Each deployment is ephemeral; no volumes or databases persist data
+- **No persistent app storage**: Deployed applications do not get managed persistent volumes or databases
+- **No automatic deployment cleanup**: Records and running containers are not automatically pruned
 - **Single-port model**: Applications must expose HTTP on a single port (typically 3000)
 - **No SSL per deployment**: All deployments are accessed through the single Caddy proxy
 - **No autoscaling**: Each deployment runs a single container instance
@@ -244,7 +296,8 @@ Possible enhancements to the platform:
 - Deployment subdomain routing (e.g., `<deployment-id>.deployments.local`)
 - Better monorepo and workspace handling
 - Persistent volume support for databases and caches
-- Deployment logs retention and archival beyond 7 days
+- Deployment and container cleanup jobs
+- Deployment logs retention and archival beyond the current 1000-line cap
 - Performance monitoring and error tracking
 - Webhook support for CI/CD integration
 
@@ -258,6 +311,8 @@ Start the Docker Compose stack (database, reverse proxy, BuildKit, Express backe
 docker compose up --build
 ```
 
+The default Compose stack loads `.env.local`, uses `backend/caddy/Caddyfile.local`, and keeps deployments available through path-based localhost URLs.
+
 The backend will run on `http://localhost:3001` and be accessible through Caddy at `http://localhost:8080/deployments`.
 
 ### Frontend Setup
@@ -270,9 +325,9 @@ npm install
 npm run dev
 ```
 
-The frontend will open at `http://localhost:5173` and proxy API requests to `http://localhost:8080` by default.
+The frontend will open at `http://localhost:5173` and use `VITE_API_BASE_URL` from the repo-level `.env.local` by default.
 
-To override the API base URL:
+To override the API base URL for one frontend run:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:8080 npm run dev
@@ -300,6 +355,8 @@ To test a deployment:
 3. Watch the logs stream in real-time as the build progresses
 4. Once deployed, click "Live" to view the running application
 5. Check logs if the build or runtime fails
+
+By default, local live links use `http://localhost:8080/deployments/:id`. This keeps local routing independent from production-only domains.
 
 ### Code Validation
 
@@ -358,37 +415,40 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
    cd velox
    ```
 
-4. **Configure the frontend API URL:**
-   
-   Update `frontend/.env.production` or set `VITE_API_BASE_URL` during build:
-   ```bash
-   VITE_API_BASE_URL=https://your-api-domain.com npm run build
+4. **Review production environment values:**
+
+   Production configuration lives in `.env.production`:
+
+   ```env
+   PUBLIC_API_BASE_URL=https://api.velox.akanshatwt.me
+   VITE_API_BASE_URL=https://api.velox.akanshatwt.me
+   FRONTEND_ORIGIN=https://velox.akanshatwt.me
+   DEPLOYMENT_URL_MODE=path
+   PUBLIC_DEPLOYMENT_BASE_DOMAIN=
+   API_DOMAIN=api.velox.akanshatwt.me
    ```
 
-5. **Update Caddy configuration:**
-   
-   Edit `backend/caddy/Caddyfile` to use your actual domain:
-   ```
-   your-api-domain.com {
-     handle /deployments {
-       reverse_proxy backend:3001
-     }
-     handle /deployments/* {
-       reverse_proxy backend:3001
-     }
-   }
-   ```
+   These values are intentionally represented in the repository so the EC2 deployment does not depend on undocumented manual edits.
+
+5. **Review production proxy configuration:**
+
+   Production Caddy routing lives in `backend/caddy/Caddyfile.production` and is mounted by `docker-compose.production.yml`.
 
 6. **Start the backend stack:**
    ```bash
-   docker compose up -d --build
+   docker compose \
+     --env-file .env.production \
+     -f docker-compose.yml \
+     -f docker-compose.production.yml \
+     up -d --build
    ```
 
-7. **Deploy the frontend:**
+7. **Build and deploy the frontend:**
    
+   The frontend reads repo-level env files because `frontend/vite.config.ts` sets `envDir` to the repository root. Production builds use `VITE_API_BASE_URL=https://api.velox.akanshatwt.me`.
+
    Option A: Serve from the same VPS
    ```bash
-   # Serve static build files with a simple HTTP server
    cd frontend
    npm run build
    npx serve -s dist -l 3000
@@ -397,11 +457,12 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
    Option B: Deploy to a CDN or static hosting (Vercel, Netlify, etc.)
    - Build locally: `npm run build`
    - Deploy the `dist/` folder to your hosting provider
+   - Point the frontend domain to `https://velox.akanshatwt.me`
 
 8. **Verify the deployment:**
    ```bash
    # Check the API is responding
-   curl https://your-api-domain.com/deployments
+   curl https://api.velox.akanshatwt.me/deployments
    
    # Open the frontend in your browser
    # Test by deploying a simple Node.js or Go application
@@ -410,7 +471,7 @@ Velox requires direct Docker and BuildKit access, making it unsuitable for serve
 ### Important Considerations
 
 - **Storage:** Deployments and logs are stored in `database.db` in the backend container. Use Docker volumes for persistence if restarting containers.
-- **Cleanup:** Deployments are automatically deleted after 7 days. Logs are removed with their deployments.
+- **Cleanup:** Deployment records and logs can be cleared with `DELETE /deployments/reset`, but running containers and built images should be monitored and cleaned up separately.
 - **Security:** The platform accepts arbitrary Git URLs. Restrict access or run in a sandboxed environment.
 - **Resource limits:** Each deployment runs in a separate container. Monitor disk usage as built images accumulate.
 
@@ -434,6 +495,20 @@ List deployments:
 GET /deployments
 ```
 
+Running deployments include a `liveUrl` generated by the backend:
+
+```json
+{
+  "id": "deployment-id",
+  "repoUrl": "https://github.com/user/project.git",
+  "status": "running",
+  "imageTag": "image-id",
+  "port": 4321,
+  "createdAt": 1710000000000,
+  "liveUrl": "https://api.velox.akanshatwt.me/deployments/deployment-id"
+}
+```
+
 Stream logs:
 
 ```http
@@ -444,4 +519,10 @@ Open a running deployment:
 
 ```http
 GET /deployments/:id
+```
+
+Reset deployment records and logs:
+
+```http
+DELETE /deployments/reset
 ```
