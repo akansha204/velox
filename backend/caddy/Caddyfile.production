@@ -11,8 +11,3 @@
     reverse_proxy backend:3001
   }
 }
-
-*.{$PUBLIC_DEPLOYMENT_BASE_DOMAIN} {
-  rewrite * /deployments/{labels.3}{uri}
-  reverse_proxy backend:3001
-}
