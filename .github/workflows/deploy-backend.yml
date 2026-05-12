@@ -1,0 +1,95 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - "docker-compose.production.yml"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: production-backend
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Backend Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend type check
+        working-directory: backend
+        run: npx tsc --noEmit
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: typecheck
+
+    steps:
+      - name: Configure SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/velox_ec2
+          chmod 600 ~/.ssh/velox_ec2
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy backend stack
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/velox_ec2 "$EC2_USER@$EC2_HOST" <<'EOF'
+          set -euo pipefail
+
+          cd /home/ubuntu/velox
+
+          git fetch origin master
+          git reset --hard origin/master
+
+          if [ ! -f .env.production ]; then
+            echo ".env.production is missing on EC2. Create it before deploying."
+            exit 1
+          fi
+
+          sudo docker compose \
+            --env-file .env.production \
+            -f docker-compose.yml \
+            -f docker-compose.production.yml \
+            up -d --build
+
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS http://localhost:3001/deployments >/dev/null; then
+              echo "Backend health check passed."
+              exit 0
+            fi
+
+            echo "Waiting for backend health check... attempt $attempt"
+            sleep 5
+          done
+
+          echo "Backend health check failed."
+          sudo docker logs --tail=100 velox-backend
+          exit 1
+          EOF
