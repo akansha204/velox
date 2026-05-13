@@ -60,7 +60,7 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          ssh -vvv -i ~/.ssh/velox_ec2 "$EC2_USER@$EC2_HOST" <<'EOF'
+          ssh -T -i ~/.ssh/velox_ec2 "$EC2_USER@$EC2_HOST" <<'EOF'
           set -euo pipefail
 
           cd /home/ubuntu/velox
@@ -79,17 +79,22 @@ jobs:
             -f docker-compose.production.yml \
             up -d --build
 
-          for attempt in 1 2 3 4 5; do
+          backend_ready=false
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
             if curl -fsS http://localhost:3001/deployments >/dev/null; then
               echo "Backend health check passed."
-              exit 0
+              backend_ready=true
+              break
             fi
 
             echo "Waiting for backend health check... attempt $attempt"
             sleep 5
           done
 
-          echo "Backend health check failed."
-          sudo docker logs --tail=100 velox-backend
-          exit 1
+          if [ "$backend_ready" != "true" ]; then
+            echo "Backend health check failed."
+            sudo docker logs --tail=100 velox-backend
+            exit 1
+          fi
           EOF
